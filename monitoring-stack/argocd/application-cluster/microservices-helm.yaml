@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: microservices-helm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/monitoring-stack
+    targetRevision: HEAD
+    path: charts/microservices
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: global.imageRegistry
+          value: "your-registry.com/"
+        - name: frontend.image.tag
+          value: "latest"
+        - name: backend.image.tag
+          value: "latest"
+  destination:
+    server: https://your-app-cluster-endpoint
+    namespace: applications
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

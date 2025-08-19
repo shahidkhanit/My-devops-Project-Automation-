@@ -1,0 +1,47 @@
+namespace: app-services
+groups:
+  - name: app.service.rules
+    rules:
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+      for: 5m
+      labels:
+        severity: critical
+        type: service
+        cluster: apps
+      annotations:
+        summary: "Pod is crash looping"
+        description: "Pod {{$labels.pod}} in namespace {{$labels.namespace}} is crash looping"
+    
+    - alert: PodNotReady
+      expr: kube_pod_status_ready{condition="false"} == 1
+      for: 10m
+      labels:
+        severity: warning
+        type: service
+        cluster: apps
+      annotations:
+        summary: "Pod not ready"
+        description: "Pod {{$labels.pod}} in namespace {{$labels.namespace}} is not ready"
+    
+    - alert: HighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+      for: 5m
+      labels:
+        severity: critical
+        type: service
+        cluster: apps
+      annotations:
+        summary: "High error rate"
+        description: "Error rate is above 10% for {{$labels.service}}"
+    
+    - alert: HighLatency
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1
+      for: 10m
+      labels:
+        severity: warning
+        type: service
+        cluster: apps
+      annotations:
+        summary: "High latency"
+        description: "95th percentile latency is above 1s for {{$labels.service}}"

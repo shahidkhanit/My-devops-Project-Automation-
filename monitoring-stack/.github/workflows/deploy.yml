@@ -1,0 +1,50 @@
+name: Deploy Monitoring Stack
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy-alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download mimirtool
+        run: |
+          curl -fLo mimirtool https://github.com/grafana/mimir/releases/download/mimir-2.11.0/mimirtool-linux-amd64
+          chmod +x mimirtool
+          
+      - name: Deploy DevOps Alerts
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ./alerts/update_alerts.sh devops
+        env:
+          MIMIR_PASSWORD: ${{ secrets.MIMIR_PASSWORD }}
+          
+      - name: Deploy Application Alerts  
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ./alerts/update_alerts.sh apps
+        env:
+          MIMIR_PASSWORD: ${{ secrets.MIMIR_PASSWORD }}
+
+  deploy-alertmanager:
+    runs-on: ubuntu-latest
+    needs: deploy-alerts
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download mimirtool
+        run: |
+          curl -fLo mimirtool https://github.com/grafana/mimir/releases/download/mimir-2.11.0/mimirtool-linux-amd64
+          chmod +x mimirtool
+          
+      - name: Deploy Alertmanager Configs
+        if: github.ref == 'refs/heads/main'
+        run: |
+          ./alertmanager/update_alertmanager.sh
+        env:
+          MIMIR_PASSWORD: ${{ secrets.MIMIR_PASSWORD }}

@@ -1,0 +1,105 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    paths:
+      - 'infra-code/**'
+    branches: [main]
+  pull_request:
+    paths:
+      - 'infra-code/**'
+    branches: [main]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      aws-changed: ${{ steps.changes.outputs.aws }}
+      azure-changed: ${{ steps.changes.outputs.azure }}
+      gcp-changed: ${{ steps.changes.outputs.gcp }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            aws:
+              - 'infra-code/aws/**'
+            azure:
+              - 'infra-code/azure/**'
+            gcp:
+              - 'infra-code/gcp/**'
+
+  deploy-aws:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.aws-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+          
+      - name: Deploy AWS Infrastructure
+        if: github.ref == 'refs/heads/main'
+        run: |
+          chmod +x infra-code/scripts/terraform-apply.sh
+          ./infra-code/scripts/terraform-apply.sh aws all
+
+  deploy-azure:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.azure-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Deploy Azure Infrastructure
+        if: github.ref == 'refs/heads/main'
+        run: |
+          chmod +x infra-code/scripts/terraform-apply.sh
+          ./infra-code/scripts/terraform-apply.sh azure all
+
+  deploy-gcp:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.gcp-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          
+      - name: Deploy GCP Infrastructure
+        if: github.ref == 'refs/heads/main'
+        run: |
+          chmod +x infra-code/scripts/terraform-apply.sh
+          ./infra-code/scripts/terraform-apply.sh gcp all
+
+  update-kubeconfig:
+    needs: [deploy-aws, deploy-azure, deploy-gcp]
+    if: always() && (needs.deploy-aws.result == 'success' || needs.deploy-azure.result == 'success' || needs.deploy-gcp.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ArgoCD Sync
+        run: |
+          echo "Infrastructure updated, ArgoCD will sync monitoring stack"

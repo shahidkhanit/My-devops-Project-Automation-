@@ -1,0 +1,12 @@
+{{ define "slack.title" }}
+{{- if ne .Status "firing" }} ✅ {{- else if eq .CommonLabels.severity "critical" }} 🔥 {{- else }} ⚠️ {{- end }} {{ .Status | toUpper }} - {{ .CommonLabels.alertname }}
+{{- end }}
+
+{{ define "slack.text" }}
+{{ range .Alerts }}
+*Description:* {{ .Annotations.description }}
+*Summary:* {{ .Annotations.summary }}
+*Cluster:* {{ .Labels.cluster }}
+*Severity:* {{ .Labels.severity }}
+{{ end }}
+{{- end }}

@@ -1,0 +1,352 @@
+# NINJA MONITORING REPOSITORY - COMPLETE DOCUMENTATION
+
+## REPOSITORY OVERVIEW
+
+This repository is a comprehensive monitoring and alerting system for Grafana Cloud that manages alerts, dashboards, and monitoring configurations across multiple environments and clusters. It's designed to provide centralized monitoring for various services including Kisaan, Trader, Analytics, and other business units.
+
+## ARCHITECTURE & COMPONENTS
+
+### Core Monitoring Stack
+- **Grafana**: Dashboard and visualization tool for metrics, logs, and traces
+- **Prometheus Agent**: Time-series database and monitoring system for scraping metrics  
+- **Loki**: Log storage system for collecting and querying logs
+- **Tempo**: Distributed tracing backend for collecting and analyzing traces
+- **Mimir**: Metrics storage and monitoring tool for additional insights
+- **Alertmanager**: Handles alerts sent by Prometheus and routes them to receivers
+
+### Key Tools Used
+- **mimirtool**: Command-line tool for managing Mimir configurations
+- **Helm Charts**: For deploying monitoring components in Kubernetes
+- **Kustomize**: For managing Kubernetes configurations
+- **Bitbucket Pipelines**: For CI/CD automation
+
+## DIRECTORY STRUCTURE & FUNCTIONALITY
+
+### 1. `/alerts/` - Alert Rules Management
+Contains Prometheus alert rules organized by environment and service type.
+
+**Structure:**
+```
+alerts/
+├── _local/           # Local development alerts
+├── _snd_prod/        # SND production alerts  
+├── _trader_prod/     # Trader production alerts
+├── _trader_qa/       # Trader QA alerts
+├── _trader_dev/      # Trader development alerts
+├── _analytics_prod/  # Analytics production alerts
+├── _kisaan_prod/     # Kisaan production alerts
+├── _aws_analytics_prod/ # AWS Analytics production alerts
+├── common/           # Common alert rules (node exporters, prometheus, etc.)
+├── common_kube/      # Kubernetes-specific common rules
+├── common_snd/       # SND-specific common rules
+└── update_alerts.sh  # Script to deploy alert rules
+```
+
+**Key Alert Types:**
+- **Database Alerts**: MySQL, PostgreSQL, MongoDB, Redis monitoring
+- **Infrastructure Alerts**: Node health, disk space, memory, CPU usage
+- **Application Alerts**: Service-specific monitoring for various business applications
+- **Kubernetes Alerts**: Pod status, resource usage, cluster health
+
+**Sample Alert Rule Structure:**
+```yaml
+namespace: database
+groups:
+  - name: database.rules
+    rules:
+    - alert: MySQLDown
+      annotations:
+        description: MySQL {{$labels.job}} on {{$labels.instance}} is not up
+        summary: MySQL not up
+      expr: mysql_up != 1
+      for: 2m
+      labels:
+        severity: critical
+        type: database
+```
+
+### 2. `/alertmanager/` - Alert Routing Configuration
+Manages how alerts are routed to different notification channels.
+
+**Structure:**
+```
+alertmanager/
+├── _local/
+├── _snd_prod/
+├── _trader_prod/
+├── _trader_qa/
+├── _trader_dev/
+├── _analytics_prod/
+├── _kisaan_prod/
+├── _aws_analytics_prod/
+├── templates/        # Slack notification templates
+└── update_alertmanager.sh
+```
+
+**Alert Routing Logic:**
+- Routes alerts based on severity (warning/critical), type (infra/service/database), and namespace
+- Supports multiple notification channels: Slack, Squadcast (PagerDuty alternative)
+- Uses label matching to determine appropriate receivers
+- Implements inhibition rules to prevent alert spam
+
+**Sample Routing Configuration:**
+```yaml
+route:
+  group_by: ['alertname','namespace','type', 'service']
+  group_wait: 0s
+  group_interval: 5m
+  repeat_interval: 1h
+  receiver: "default"
+  routes:
+    - matchers:
+      - severity=critical
+      - type=service
+      receiver: product-devops-critical
+```
+
+### 3. `/Charts/` - Helm Chart Configurations
+Contains Helm charts for deploying monitoring stack components.
+
+**Key Components:**
+- **agent/**: Grafana Agent configurations for different clusters
+- **mimir/**: Mimir distributed setup for metrics storage
+- **loki/**: Loki distributed setup for log aggregation
+- **tempo/**: Tempo distributed setup for tracing
+- **grafana/**: Grafana dashboard configurations
+- **etcd/**: etcd monitoring setup
+
+**Sample Agent Configuration:**
+```yaml
+k8s-monitoring:
+  cluster:
+    name: trader-prod
+  externalServices:
+    prometheus:
+      host: 'https://mimir.ninjacart.in'
+      tenantId: _trader_prod
+      authMode: basic
+    loki:
+      host: 'https://loki.ninjacart.in'
+      tenantId: _trader_prod
+    tempo:
+      host: 'tempo.ninjacart.in:443'
+      tenantId: _trader_prod
+```
+
+### 4. `/dashboards/` - Grafana Dashboard Definitions
+Organized collection of Grafana dashboards for different services and infrastructure components.
+
+**Categories:**
+- **Application/**: Application-specific dashboards
+- **Business/**: Business unit dashboards (Kisaan, Trader, GTP, etc.)
+- **Database/**: Database monitoring dashboards
+- **DevOps/**: Infrastructure and DevOps dashboards
+- **Essential Metrics K8s-applications/**: Core Kubernetes metrics
+- **kafka-monitoring/**: Kafka cluster monitoring
+- **SND/**: SND-specific dashboards
+
+### 5. `/scripts/` - Automation Scripts
+Utility scripts for managing configurations:
+- `update_dashboard_json.sh`: Processes dashboard JSON files
+- `update_kustomization.sh`: Updates Kustomize configurations
+- `update_otel_endpoints.sh`: Updates OpenTelemetry endpoints
+- `update_patch_directory.sh`: Updates patch directories
+
+## DEPLOYMENT & AUTOMATION
+
+### CI/CD Pipeline (bitbucket-pipelines.yml)
+```yaml
+pipelines:
+  branches:
+    main:
+    - step: download_mimirtool    # Downloads mimirtool binary
+    - step: update_alerts         # Deploys alert rules
+    - step: update_alertmanager   # Deploys alertmanager configs
+```
+
+### Alert Deployment Process
+The `update_alerts.sh` script:
+1. Iterates through all environment directories
+2. Determines the appropriate Mimir endpoint based on environment
+3. Uses mimirtool to load alert rules to the correct tenant
+4. Includes common rules and environment-specific rules
+
+**Mimir Endpoints by Environment:**
+- **Hetzner**: `https://mimir-hetzner.ninjacart.in` (SND prod)
+- **GCP**: `https://mimir-gcp.ninjacart.in` (Trader dev/qa, Kisaan prod, Analytics prod)
+- **AWS**: `https://mimir-aws.ninjacart.in` (AWS Analytics prod)
+- **Default**: `https://mimir.ninjacart.in` (Trader prod, Local)
+
+### Alertmanager Deployment Process
+The `update_alertmanager.sh` script:
+1. Deploys alertmanager configurations to appropriate Mimir instances
+2. Includes Slack templates for notification formatting
+3. Routes to correct endpoints based on environment
+
+## ALERT ROUTING STRATEGY
+
+### Severity Levels
+- **Critical**: Immediate attention required, routes to critical channels and PagerDuty
+- **Warning**: Important but not urgent, routes to warning channels
+- **Info**: Informational alerts
+
+### Alert Types
+- **infra**: Infrastructure-related alerts (CPU, memory, disk, network)
+- **service**: Application service alerts
+- **database**: Database-specific alerts
+- **business_alerts**: Business logic alerts
+
+### Notification Channels by Cluster
+
+| Cluster | Type | Severity | Slack Channel |
+|---------|------|----------|---------------|
+| Kisaan Prod | Infra | Warning | kisaan-infra-warning |
+| Kisaan Prod | Infra | Critical | kisaan-infra-critical |
+| Kisaan Prod | Service | Warning | kisaan-warning-alerts |
+| Kisaan Prod | Service | Critical | kisaan-critical-alerts |
+| Trader Prod | Infra | Warning | trader-infra-warning |
+| Trader Prod | Infra | Critical | trader-infra-critical |
+| Trader Prod | Service | Warning | prod-warning-alerts |
+| Trader Prod | Service | Critical | prod-critical-alerts |
+| Data Analytics | Infra | Warning | data-analytics-infra-warning |
+| Data Analytics | Infra | Critical | data-analytics-infra-critical |
+| Data Analytics | Service | Warning | data-analytics-warning-alerts |
+| Data Analytics | Service | Critical | data-analytics-critical-alerts |
+
+## MONITORING COVERAGE
+
+### Infrastructure Monitoring
+- **Node Exporter**: System metrics (CPU, memory, disk, network)
+- **Kubernetes**: Pod status, resource usage, cluster health
+- **Database**: MySQL, PostgreSQL, MongoDB, Redis, Elasticsearch
+- **Load Balancers**: HAProxy, NGINX Ingress
+- **Storage**: Filesystem usage, RAID status
+
+### Application Monitoring
+- **Business Applications**: Kisaan, Trader Platform, GTP, ONDC, etc.
+- **Platform Services**: IAM, API Gateway, Workflow, KYC services
+- **Payment Services**: Payment gateways, lending services
+- **Data Platform**: Kafka, ClickHouse, data processing services
+
+### Log Monitoring
+- **Application Logs**: Structured logging via Loki
+- **System Logs**: Journal logs, container logs
+- **Security Logs**: Falco security events
+- **Audit Logs**: Kubernetes audit logs
+
+### Tracing
+- **Distributed Tracing**: OpenTelemetry integration with Tempo
+- **Performance Monitoring**: Request tracing across microservices
+- **Error Tracking**: Exception and error tracing
+
+## CONFIGURATION MANAGEMENT
+
+### Environment-Specific Configurations
+Each environment has its own:
+- Alert rules tailored to the environment's criticality
+- Alertmanager routing specific to team responsibilities  
+- Dashboard configurations optimized for the use case
+- Monitoring agent configurations with appropriate scrape intervals
+
+### Multi-Tenant Architecture
+- **Tenant Isolation**: Each environment is a separate tenant in Mimir/Loki/Tempo
+- **Access Control**: Basic auth with environment-specific credentials
+- **Resource Isolation**: Separate resource limits and configurations per tenant
+
+### Configuration Validation
+- **Config Validator**: Validates configurations before deployment
+- **Test Suite**: Automated tests to verify monitoring functionality
+- **Config Analysis**: Analyzes configurations for optimization opportunities
+
+## SECURITY & COMPLIANCE
+
+### Authentication & Authorization
+- Basic authentication for Mimir/Loki/Tempo access
+- Environment-specific credentials
+- Secure credential management via Kubernetes secrets
+
+### Security Monitoring
+- **Falco Integration**: Runtime security monitoring
+- **Trivy Operator**: Vulnerability scanning
+- **Secret Scanning**: Detection of leaked secrets in repositories
+- **OWASP ModSecurity**: Web application firewall monitoring
+
+### Compliance Features
+- **Audit Logging**: Complete audit trail of configuration changes
+- **Data Retention**: Configurable retention policies for metrics and logs
+- **Access Logging**: Monitoring of who accesses what data
+
+## OPERATIONAL PROCEDURES
+
+### Adding New Alerts
+1. Create alert rule in appropriate environment directory under `/alerts/`
+2. Test alert rule in development environment
+3. Update alertmanager routing if new notification channels needed
+4. Commit changes to trigger CI/CD pipeline
+5. Verify alert deployment via Grafana UI
+
+### Adding New Dashboards
+1. Create dashboard JSON in appropriate category under `/dashboards/`
+2. Update `kustomization.yaml` to include new dashboard
+3. Create patch-directory.yaml for dashboard metadata
+4. Test dashboard functionality
+5. Deploy via Kustomize
+
+### Environment Onboarding
+1. Create new environment directory in `/alerts/` and `/alertmanager/`
+2. Configure agent values in `/Charts/agent/`
+3. Update deployment scripts to include new environment
+4. Set up appropriate Slack channels and notification routing
+5. Deploy monitoring stack to new environment
+
+### Troubleshooting Common Issues
+- **Alert Not Firing**: Check alert rule syntax, metric availability, and evaluation intervals
+- **Missing Metrics**: Verify scrape configurations and service discovery
+- **Notification Issues**: Check alertmanager routing rules and receiver configurations
+- **Dashboard Issues**: Verify data source configurations and query syntax
+
+## BEST PRACTICES
+
+### Alert Design
+- Use meaningful alert names and descriptions
+- Include runbook links where applicable
+- Set appropriate severity levels
+- Avoid alert fatigue with proper thresholds
+- Use label-based routing for flexibility
+
+### Dashboard Design
+- Organize dashboards by service/team ownership
+- Use consistent naming conventions
+- Include relevant metadata and annotations
+- Optimize queries for performance
+- Provide multiple views (overview, detailed, troubleshooting)
+
+### Configuration Management
+- Use version control for all configurations
+- Test changes in development environments first
+- Document configuration changes
+- Use consistent labeling and naming conventions
+- Implement proper change management processes
+
+## MAINTENANCE & UPDATES
+
+### Regular Maintenance Tasks
+- Update mimirtool and other tools regularly
+- Review and optimize alert rules
+- Clean up unused dashboards and configurations
+- Monitor resource usage and optimize as needed
+- Update documentation and runbooks
+
+### Capacity Planning
+- Monitor metrics storage growth
+- Plan for log retention and storage requirements
+- Scale monitoring infrastructure as needed
+- Optimize query performance and resource usage
+
+### Disaster Recovery
+- Backup configurations regularly
+- Document recovery procedures
+- Test disaster recovery scenarios
+- Maintain redundancy across multiple regions/providers
+
+This repository represents a mature, production-ready monitoring solution that provides comprehensive observability across a complex microservices architecture. It demonstrates best practices in monitoring, alerting, and operational excellence.

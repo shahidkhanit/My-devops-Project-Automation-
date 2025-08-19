@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring-agent-apps
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: k8s-monitoring
+    targetRevision: 1.4.6
+    helm:
+      valueFiles:
+        - $values/charts/agent/application-cluster-values.yaml
+  sources:
+    - repoURL: https://github.com/your-org/monitoring-stack
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://your-app-cluster-endpoint
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

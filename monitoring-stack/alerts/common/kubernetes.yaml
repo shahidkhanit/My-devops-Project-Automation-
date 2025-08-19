@@ -1,0 +1,33 @@
+namespace: kubernetes
+groups:
+  - name: kubernetes.rules
+    rules:
+    - alert: KubePodCrashLooping
+      expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[5m]) >= 1
+      for: 15m
+      labels:
+        severity: warning
+        type: infra
+      annotations:
+        summary: Pod is crash looping
+        description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is in waiting state (reason: CrashLoopBackOff)."
+    
+    - alert: KubePodNotReady
+      expr: sum by (namespace, pod, cluster) (max by(namespace, pod, cluster) (kube_pod_status_phase{phase=~"Pending|Unknown|Failed"}) * on(namespace, pod, cluster) group_left(owner_kind) topk by(namespace, pod, cluster) (1, max by(namespace, pod, owner_kind, cluster) (kube_pod_owner{owner_kind!="Job"}))) > 0
+      for: 15m
+      labels:
+        severity: warning
+        type: infra
+      annotations:
+        summary: Pod has been in a non-ready state for more than 15 minutes
+        description: "Pod {{ $labels.namespace }}/{{ $labels.pod }} has been in a non-ready state for longer than 15 minutes."
+    
+    - alert: KubeDeploymentReplicasMismatch
+      expr: (kube_deployment_spec_replicas{job="kube-state-metrics"} > kube_deployment_status_replicas_available{job="kube-state-metrics"}) and (changes(kube_deployment_status_replicas_updated{job="kube-state-metrics"}[10m]) == 0)
+      for: 15m
+      labels:
+        severity: warning
+        type: infra
+      annotations:
+        summary: Deployment has not matched the expected number of replicas
+        description: "Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has not matched the expected number of replicas for longer than 15 minutes."

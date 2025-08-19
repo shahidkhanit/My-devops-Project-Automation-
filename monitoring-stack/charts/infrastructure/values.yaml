@@ -1,0 +1,130 @@
+global:
+  cloudProvider: "aws"  # aws, azure, gcp
+  environment: "production"
+  region: "us-west-2"
+
+aws:
+  enabled: true
+  region: "us-west-2"
+  clusters:
+    devops:
+      enabled: true
+      nodeGroups:
+        - name: "devops-nodes"
+          instanceType: "t3.medium"
+          minSize: 2
+          maxSize: 5
+          desiredSize: 3
+    application:
+      enabled: true
+      nodeGroups:
+        - name: "app-nodes"
+          instanceType: "t3.large"
+          minSize: 3
+          maxSize: 10
+          desiredSize: 5
+  storage:
+    mimir:
+      enabled: true
+      bucketName: ""  # Auto-generated if empty
+    loki:
+      enabled: true
+      bucketName: ""
+    tempo:
+      enabled: true
+      bucketName: ""
+
+azure:
+  enabled: false
+  location: "East US"
+  clusters:
+    devops:
+      enabled: true
+      nodePool:
+        vmSize: "Standard_D2_v2"
+        nodeCount: 3
+    application:
+      enabled: true
+      nodePool:
+        vmSize: "Standard_D4_v2"
+        nodeCount: 5
+  storage:
+    accountName: ""  # Auto-generated if empty
+    containers:
+      mimir: "mimir-metrics"
+      loki: "loki-logs"
+      tempo: "tempo-traces"
+
+gcp:
+  enabled: false
+  region: "us-central1"
+  projectId: ""
+  clusters:
+    devops:
+      enabled: true
+      nodePool:
+        machineType: "e2-medium"
+        nodeCount: 3
+    application:
+      enabled: true
+      nodePool:
+        machineType: "e2-standard-2"
+        nodeCount: 5
+  storage:
+    buckets:
+      mimir: ""  # Auto-generated if empty
+      loki: ""
+      tempo: ""
+
+terraform:
+  image:
+    repository: hashicorp/terraform
+    tag: "1.5"
+    pullPolicy: IfNotPresent
+  
+  backend:
+    type: "local"  # local, s3, azurerm, gcs
+    config: {}
+  
+  workspace: "default"
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+monitoring:
+  enabled: true
+  metrics:
+    enabled: true
+    interval: "30s"
+  
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+rbac:
+  create: true
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

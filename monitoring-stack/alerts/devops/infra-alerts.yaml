@@ -1,0 +1,47 @@
+namespace: devops-infra
+groups:
+  - name: devops.infra.rules
+    rules:
+    - alert: NodeDown
+      expr: up{job="node-exporter"} == 0
+      for: 5m
+      labels:
+        severity: critical
+        type: infra
+        cluster: devops
+      annotations:
+        summary: "Node is down"
+        description: "Node {{$labels.instance}} has been down for more than 5 minutes"
+    
+    - alert: HighCPUUsage
+      expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+      for: 10m
+      labels:
+        severity: warning
+        type: infra
+        cluster: devops
+      annotations:
+        summary: "High CPU usage"
+        description: "CPU usage is above 80% on {{$labels.instance}}"
+    
+    - alert: HighMemoryUsage
+      expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+      for: 10m
+      labels:
+        severity: warning
+        type: infra
+        cluster: devops
+      annotations:
+        summary: "High memory usage"
+        description: "Memory usage is above 85% on {{$labels.instance}}"
+    
+    - alert: DiskSpaceLow
+      expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+      for: 5m
+      labels:
+        severity: critical
+        type: infra
+        cluster: devops
+      annotations:
+        summary: "Disk space low"
+        description: "Disk space is below 10% on {{$labels.instance}}"

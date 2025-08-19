@@ -1,0 +1,82 @@
+namespace: microservices
+groups:
+  - name: microservices.rules
+    rules:
+    - alert: FrontendDown
+      expr: up{job="frontend"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        type: service
+        cluster: apps
+        service: frontend
+      annotations:
+        summary: "Frontend service is down"
+        description: "Frontend service has been down for more than 2 minutes"
+    
+    - alert: BackendDown
+      expr: up{job="backend"} == 0
+      for: 2m
+      labels:
+        severity: critical
+        type: service
+        cluster: apps
+        service: backend
+      annotations:
+        summary: "Backend service is down"
+        description: "Backend service has been down for more than 2 minutes"
+    
+    - alert: HighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+      for: 5m
+      labels:
+        severity: warning
+        type: service
+        cluster: apps
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is above 5% for {{ $labels.service }}"
+    
+    - alert: HighLatency
+      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+      for: 10m
+      labels:
+        severity: warning
+        type: service
+        cluster: apps
+      annotations:
+        summary: "High latency detected"
+        description: "95th percentile latency is above 2s for {{ $labels.service }}"
+    
+    - alert: DatabaseConnectionFailure
+      expr: mysql_up == 0
+      for: 1m
+      labels:
+        severity: critical
+        type: database
+        cluster: apps
+      annotations:
+        summary: "Database connection failure"
+        description: "MySQL database is not responding"
+    
+    - alert: RedisDown
+      expr: redis_up == 0
+      for: 1m
+      labels:
+        severity: critical
+        type: cache
+        cluster: apps
+      annotations:
+        summary: "Redis cache is down"
+        description: "Redis cache service is not responding"
+    
+    - alert: LowCacheHitRate
+      expr: redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) < 0.8
+      for: 10m
+      labels:
+        severity: warning
+        type: cache
+        cluster: apps
+      annotations:
+        summary: "Low cache hit rate"
+        description: "Redis cache hit rate is below 80%"

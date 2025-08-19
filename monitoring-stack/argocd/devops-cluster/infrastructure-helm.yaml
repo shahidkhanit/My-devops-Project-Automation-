@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infrastructure-helm
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/your-org/monitoring-stack
+    targetRevision: HEAD
+    path: charts/infrastructure
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: global.cloudProvider
+          value: "aws"
+        - name: global.environment
+          value: "production"
+        - name: aws.enabled
+          value: "true"
+        - name: azure.enabled
+          value: "false"
+        - name: gcp.enabled
+          value: "false"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: infrastructure
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
