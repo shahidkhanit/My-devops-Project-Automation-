@@ -1,0 +1,115 @@
+name: Deploy Applications
+
+on:
+  push:
+    paths:
+      - 'monitoring-stack/applications/**'
+    branches: [main]
+  pull_request:
+    paths:
+      - 'applications/**'
+    branches: [main]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      k8s-changed: ${{ steps.changes.outputs.k8s }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'applications/frontend/**'
+            backend:
+              - 'applications/backend/**'
+            k8s:
+              - 'applications/k8s-manifests/**'
+
+  build-frontend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+          
+      - name: Build and push frontend
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: applications/docker/frontend.Dockerfile
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/monitoring/frontend:${{ github.sha }}
+
+  build-backend:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Login to Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+          
+      - name: Build and push backend
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: applications/docker/backend.Dockerfile
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/monitoring/backend:${{ github.sha }}
+
+  update-manifests:
+    needs: [build-frontend, build-backend]
+    if: always() && (needs.build-frontend.result == 'success' || needs.build-backend.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Update image tags
+        run: |
+          if [ "${{ needs.build-frontend.result }}" == "success" ]; then
+            sed -i "s|image: monitoring/frontend:.*|image: ${{ secrets.REGISTRY_URL }}/monitoring/frontend:${{ github.sha }}|" applications/k8s-manifests/frontend-deployment.yaml
+          fi
+          if [ "${{ needs.build-backend.result }}" == "success" ]; then
+            sed -i "s|image: monitoring/backend:.*|image: ${{ secrets.REGISTRY_URL }}/monitoring/backend:${{ github.sha }}|" applications/k8s-manifests/backend-deployment.yaml
+          fi
+          
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add applications/k8s-manifests/
+          git diff --staged --quiet || git commit -m "Update image tags to ${{ github.sha }}"
+          git push
+
+  trigger-argocd:
+    needs: update-manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger ArgoCD Sync
+        run: |
+          echo "Applications updated, ArgoCD will sync automatically"
